@@ -36,6 +36,10 @@ class IAModels(object):
         class Role(self.db.Model):
             id = self.db.Column(self.db.Integer, primary_key=True)
             name = self.db.Column(self.db.String, unique=True, nullable=False)
+        self.Role = Role
 
         class RoleRegistration(self.db.Model):
             id = self.db.Column(self.db.Integer, primary_key=True)
+            user_id = self.db.Column(self.db.Integer, self.db.ForeignKey("user.id"))
+            role_id = self.db.Column(self.db.Integer, self.db.ForeignKey("role.id"))
+        self.RoleRegistration = RoleRegistration

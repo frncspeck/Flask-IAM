@@ -9,6 +9,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from http import HTTPStatus
 import phonenumbers
 from flask_iam.models import IAModels
+from flask_iam.utils import root_required, role_required
 
 class IAM:
     class LoginForm(FlaskForm):
@@ -29,8 +30,8 @@ class IAM:
         submit = SubmitField()
 
     class RoleAssignForm(FlaskForm):
-        user = SelectField('User')
-        role = SelectField('Role')
+        user_id = SelectField('User')
+        role_id = SelectField('Role')
         submit = SubmitField()
 
     class ProfileForm(FlaskForm):
@@ -63,6 +64,7 @@ class IAM:
 
     def __init__(self, app, db, url_prefix='/auth'):
         self.app = app
+        app._iam = self # reverse link for decorator access
         self.db = db
         self.login_manager = LoginManager()
         self.login_manager.init_app(self.app)
@@ -72,7 +74,7 @@ class IAM:
         @self.login_manager.user_loader
         def load_user(user_id):
             return self.models.User.query.get_or_404(user_id)
-        self.login_manager.login_view = 'iam_blueprint.read_login'
+        self.login_manager.login_view = 'iam_blueprint.login'
         self.blueprint = Blueprint(
             'iam_blueprint', __name__,
             url_prefix=url_prefix,
@@ -85,18 +87,14 @@ class IAM:
         self.blueprint.add_url_rule("/user/logout", 'logout', view_func=self.logout_user, methods=['GET','POST'])
         self.blueprint.add_url_rule("/role/add", 'add_role', view_func=self.add_role, methods=['GET','POST'])
         self.blueprint.add_url_rule("/role/assign", 'assign_role', view_func=self.assign_role, methods=['GET','POST'])
+        self.blueprint.add_url_rule("/admin", 'admin' , view_func=self.admin, methods=['GET'])
         app.register_blueprint(
             self.blueprint, url_prefix=url_prefix
         )
 
+    @login_required
     def iam_index(self):
         return render_template('IAM/index.html')
-
-    def add_role(self):
-        return ''
-
-    def assign_role(self):
-        return ''
 
     def add_user(self):
         form = self.RegistrationForm()
@@ -117,6 +115,36 @@ class IAM:
 
             return render_template('IAM/registration_success.html') #redirect('/')
         return render_template('IAM/form.html', form=form, title='Register')
+
+    @login_required
+    def add_role(self):
+        form = self.RoleForm()
+        if form.validate_on_submit():
+            new_role = self.models.Role()
+            form.populate_obj(new_role)
+            self.db.session.add(new_role)
+            self.db.session.commit()
+
+            flash("Role was created")
+
+            return redirect(url_for('iam_blueprint.iam'))
+        return render_template('IAM/form.html', form=form, title='Add role')
+
+    @login_required
+    def assign_role(self):
+        form = self.RoleAssignForm()
+        form.role_id.choices = [(r.id, r) for r in self.models.Role.query.all()]
+        form.user_id.choices = [(r.id, r) for r in self.models.User.query.all()]
+        if form.validate_on_submit():
+            new_role_registration = self.models.RoleRegistration()
+            form.populate_obj(new_role_registration)
+            self.db.session.add(new_role_registration)
+            self.db.session.commit()
+
+            flash("Role was assigned")
+
+            return redirect(url_for('iam_blueprint.iam'))
+        return render_template('IAM/form.html', form=form, title='Assign role')
 
     def login_user(self):
         form = self.LoginForm()
@@ -154,14 +182,14 @@ class IAM:
         return render_template('IAM/form.html', form=form, title='Profile')    
 
     # Admin page
-    @login_required
+    @role_required('admin')
     def admin(self):
         if current_user.role != 'admin':
             abort(HTTPStatus.UNAUTHORIZED)
         users = self.models.User.query.all()
         return render_template('IAM/list.html', items=users, title=f"User list")
 
-    @login_required
+    @root_required
     def enabler(self,userid):
         if current_user.role != 'admin':
             abort(HTTPStatus.UNAUTHORIZED)
@@ -170,7 +198,7 @@ class IAM:
         self.db.session.commit()
         return redirect('/user/admin')
 
-    @login_required
+    @root_required
     def remove_user(self,userid):
         if current_user.role != 'admin':
             abort(HTTPStatus.UNAUTHORIZED)
@@ -196,3 +224,4 @@ if __name__ == '__main__':
     def index():
         return redirect('/auth')
     app.run(host='0.0.0.0')
+
