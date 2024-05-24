@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+
+{% block title %}Registration succeeded{% endblock %}
+
+{% block content %}
+<div class="container">
+  <h1>Registration succeeded</h1>
+  <p>
+      Thanks for registering at {{ url_for('iam_blueprint.iam')[:-5] }}. At this point, you can click again
+      on account and login and browse around. {# TODO check if email confirmation is required #}
+  </p>
+</div>
+{% endblock %}

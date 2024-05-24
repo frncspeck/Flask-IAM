@@ -1,0 +1,9 @@
+<br />
+<ul class="nav nav-tabs">
+  {% for endpoint in ['iam','assign_role'] %}
+  <li class="nav-item">
+    <a {% if request.path == url_for('iam_blueprint.'+endpoint) %}class="nav-link active"{% else %}class="nav-link"{% endif %} aria-current="page"
+      href="{{ url_for('iam_blueprint.'+endpoint) }}">{{ endpoint.capitalize().replace('_',' ') }}</a>
+  </li>
+  {% endfor %}
+</ul>

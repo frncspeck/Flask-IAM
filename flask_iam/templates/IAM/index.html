@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Identity and Access Management{% endblock %}
+
+{% block content %}
+<div class="container">
+
+  {% block navtabs %}
+  {% include 'IAM/nav.html' %}
+  {%- endblock navtabs %}
+
+ <br />
+ <p>This is the IAM start site. Manage users and access here.</p>
+ <ul>
+  <li><a href={{ url_for('iam_blueprint.register')  }}>Add user</a></li>
+  <li><a href={{ url_for('iam_blueprint.add_role')  }}>Add role</a></li>
+  <li><a href={{ url_for('iam_blueprint.assign_role')  }}>Assign role</a></li>
+ </ul>
+
+</div>
+{% endblock %}
