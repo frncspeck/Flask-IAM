@@ -62,13 +62,10 @@ class IAM:
             if not check_password_hash(current_user.password_hash, old_password.data):
                 raise ValidationError('This is not the user you are looking for')
 
-    def __init__(self, app, db, url_prefix='/auth'):
-        self.app = app
-        app._iam = self # reverse link for decorator access
+    def __init__(self, db, app=None, url_prefix='/auth'):
         self.db = db
+        self.url_prefix = url_prefix
         self.login_manager = LoginManager()
-        self.login_manager.init_app(self.app)
-
         self.models = IAModels(db)
 
         @self.login_manager.user_loader
@@ -77,7 +74,7 @@ class IAM:
         self.login_manager.login_view = 'iam_blueprint.login'
         self.blueprint = Blueprint(
             'iam_blueprint', __name__,
-            url_prefix=url_prefix,
+            url_prefix=self.url_prefix,
             template_folder='templates'
         )
 
@@ -88,9 +85,21 @@ class IAM:
         self.blueprint.add_url_rule("/role/add", 'add_role', view_func=self.add_role, methods=['GET','POST'])
         self.blueprint.add_url_rule("/role/assign", 'assign_role', view_func=self.assign_role, methods=['GET','POST'])
         self.blueprint.add_url_rule("/admin", 'admin' , view_func=self.admin, methods=['GET'])
+
+    def init_app(self, app):
+        app.extensions['IAM'] = self # link for decorator access
+        self.login_manager.init_app(app)
         app.register_blueprint(
-            self.blueprint, url_prefix=url_prefix
+            self.blueprint, url_prefix=self.url_prefix
         )
+        # Set menu
+        fef = app.extensions['fefset']
+        fef.settings['side_menu_name_function'] = self.side_menu_name #'Account'
+        fef.add_side_menu_entry('Login', f"{self.url_prefix}/user/login")#url_for('iam_blueprint.login'))        
+        fef.add_side_menu_entry('Register', f"{self.url_prefix}/user/add")#url_for('iam_blueprint.register'))        
+
+    def side_menu_name(self):
+        return f"Hi, {current_user}" if current_user.is_authenticated else 'Account'
 
     @login_required
     def iam_index(self):
@@ -114,7 +123,7 @@ class IAM:
             flash("User was created")
 
             return render_template('IAM/registration_success.html') #redirect('/')
-        return render_template('IAM/form.html', form=form, title='Register')
+        return render_template('uxfab/form.html', form=form, title='Register')
 
     @login_required
     def add_role(self):
@@ -128,7 +137,7 @@ class IAM:
             flash("Role was created")
 
             return redirect(url_for('iam_blueprint.iam'))
-        return render_template('IAM/form.html', form=form, title='Add role')
+        return render_template('uxfab/form.html', form=form, title='Add role')
 
     @login_required
     def assign_role(self):
@@ -144,7 +153,7 @@ class IAM:
             flash("Role was assigned")
 
             return redirect(url_for('iam_blueprint.iam'))
-        return render_template('IAM/form.html', form=form, title='Assign role')
+        return render_template('uxfab/form.html', form=form, title='Assign role')
 
     def login_user(self):
         form = self.LoginForm()
@@ -179,7 +188,7 @@ class IAM:
                     form.new_password.data
                 )
             self.db.session.commit()
-        return render_template('IAM/form.html', form=form, title='Profile')    
+        return render_template('uxfab/form.html', form=form, title='Profile')    
 
     # Admin page
     @role_required('admin')
@@ -208,20 +217,32 @@ class IAM:
         return redirect('/user/admin')
 
 
-if __name__ == '__main__':
+def create_app(run=False):
     import os
     from flask import Flask
+    from flask_fefset import FEFset
+    from flask_uxfab import UXFab
     from flask_sqlalchemy import SQLAlchemy
     app = Flask(__name__)
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
     app.config['SECRET_KEY'] = os.urandom(12).hex() # to allow csrf forms
     db = SQLAlchemy()
+    fef = FEFset(frontend='bootstrap4')
+    fef.init_app(app)
     db.init_app(app)
-    iam = IAM(app, db)
+    uxf = UXFab()
+    uxf.init_app(app)
+    iam = IAM(db)
+    iam.init_app(app)
     with app.app_context():
         db.create_all()
     @app.route('/')
     def index():
         return redirect('/auth')
-    app.run(host='0.0.0.0')
+    if run: app.run(host='0.0.0.0')
+    else:
+        return app
+
+if __name__ == '__main__':
+    create_app(run=True)
 

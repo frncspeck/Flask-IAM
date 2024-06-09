@@ -1,11 +1,12 @@
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools","setuptools-scm"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "Flask-IAM"
-version = "0.0.1"
+version = "0.0.2"
 readme = "README.md"
 dependencies = [
-  'flask_login'
+  'Flask-Login==0.6.3',
+  'Flask-UXFab>=0.0.1'
 ]

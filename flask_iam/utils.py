@@ -55,9 +55,9 @@ def role_required(role):
                 pass
             else:
                 print('Testing if role assigned')
-                role_id = current_app._iam.models.Role.query.filter_by(name=role).first().id
+                role_id = current_app.extensions['IAM'].models.Role.query.filter_by(name=role).first().id
                 print(role_id)
-                assigned_role = current_app._iam.models.RoleRegistration.query.filter_by(user_id=current_user.id).filter_by(role_id=role_id).first()
+                assigned_role = current_app.extensions['IAM'].models.RoleRegistration.query.filter_by(user_id=current_user.id).filter_by(role_id=role_id).first()
                 print('Assigned role', assigned_role)
                 if not assigned_role: return current_app.login_manager.unauthorized()
             return current_app.ensure_sync(func)(*args, **kwargs)
