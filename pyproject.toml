@@ -8,5 +8,6 @@ version = "0.0.2"
 readme = "README.md"
 dependencies = [
   'Flask-Login==0.6.3',
-  'Flask-UXFab>=0.0.1'
+  'Flask-UXFab>=0.0.1',
+  'phonenumbers==8.13.42'
 ]
