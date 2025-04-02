@@ -1,4 +1,5 @@
 from flask_login import UserMixin
+import secrets
 
 class IAModels(object):
     def __init__(self, db):
@@ -6,16 +7,19 @@ class IAModels(object):
         self._make_models()
     
     def _make_models(self):
-        class User(UserMixin, self.db.Model):
-            id = self.db.Column(self.db.Integer, primary_key=True)
-            username = self.db.Column(self.db.String, unique=True, nullable=False)
-            email = self.db.Column(self.db.String)
-            phone = self.db.Column(self.db.String)
-            address = self.db.Column(self.db.String)
-            password_hash = self.db.Column(self.db.String)
-            role = self.db.Column(self.db.String)
-            role_interest = self.db.Column(self.db.Integer, default=0)
-            enabled = self.db.Column(self.db.Boolean)
+        db = self.db
+
+        # Define classes
+        class User(UserMixin, db.Model):
+            id = db.Column(db.Integer, primary_key=True)
+            username = db.Column(db.String, unique=True, nullable=False)
+            email = db.Column(db.String)
+            phone = db.Column(db.String)
+            address = db.Column(db.String)
+            password_hash = db.Column(db.String)
+            role = db.Column(db.String)
+            role_interest = db.Column(db.Integer, default=0)
+            enabled = db.Column(db.Boolean)
 
             @property
             def data_columns(self):
@@ -33,13 +37,23 @@ class IAModels(object):
                 ]
         self.User = User
 
-        class Role(self.db.Model):
-            id = self.db.Column(self.db.Integer, primary_key=True)
-            name = self.db.Column(self.db.String, unique=True, nullable=False)
+        class Role(db.Model):
+            id = db.Column(db.Integer, primary_key=True)
+            name = db.Column(db.String, unique=True, nullable=False)
         self.Role = Role
 
-        class RoleRegistration(self.db.Model):
-            id = self.db.Column(self.db.Integer, primary_key=True)
-            user_id = self.db.Column(self.db.Integer, self.db.ForeignKey("user.id"))
-            role_id = self.db.Column(self.db.Integer, self.db.ForeignKey("role.id"))
+        class RoleRegistration(db.Model):
+            id = db.Column(db.Integer, primary_key=True)
+            user_id = db.Column(db.Integer, db.ForeignKey("user.id"))
+            role_id = db.Column(db.Integer, db.ForeignKey("role.id"))
         self.RoleRegistration = RoleRegistration
+
+        class APIKey(db.Model):
+            id = db.Column(db.Integer, primary_key=True)
+            key = db.Column(
+                db.String, unique=True, nullable=False,
+                default= lambda: secrets.token_urlsafe(32) #TODO get size from IAM config
+            )
+            user_id = db.Column(db.Integer, db.ForeignKey("user.id"))
+            expiration = db.Column(db.DateTime)
+        self.APIKey = APIKey

@@ -1,13 +1,12 @@
 # flask imports
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from flask import Blueprint, request, render_template, redirect, url_for, flash, abort
+from flask import Blueprint, request, render_template, redirect, url_for, flash, abort, jsonify
 from flask_login import login_user, logout_user, login_required, current_user
 from flask_wtf import FlaskForm
 from wtforms import StringField, EmailField, PasswordField, SubmitField, SelectField, BooleanField
 from wtforms.validators import InputRequired, DataRequired, Optional, Email, ValidationError
 from werkzeug.security import generate_password_hash, check_password_hash
 from http import HTTPStatus
-import phonenumbers
 from flask_iam.models import IAModels
 from flask_iam.utils import root_required, role_required
 
@@ -51,6 +50,7 @@ class IAM:
         submit = SubmitField('Update profile')
 
         def validate_phone(self, phone):
+            import phonenumbers
             try:
                 p = phonenumbers.parse(phone.data)
                 if not phonenumbers.is_valid_number(p):
@@ -79,12 +79,15 @@ class IAM:
         )
 
         self.blueprint.add_url_rule("/", 'iam', view_func=self.iam_index, methods=['GET'])
-        self.blueprint.add_url_rule("/user/add", 'register', view_func=self.add_user, methods=['GET','POST'])
-        self.blueprint.add_url_rule("/user/login", 'login', view_func=self.login_user, methods=['GET','POST'])
+        self.blueprint.add_url_rule("/user/add", 'register', view_func=self.add_user_form, methods=['GET','POST'])
+        self.blueprint.add_url_rule("/api/user/add", 'api_register', view_func=self.add_user_api, methods=['POST'])
+        self.blueprint.add_url_rule("/user/login", 'login', view_func=self.login_user_form, methods=['GET','POST'])
         self.blueprint.add_url_rule("/user/logout", 'logout', view_func=self.logout_user, methods=['GET','POST'])
+        self.blueprint.add_url_rule("/api/user/login", 'api_login', view_func=self.login_user_api, methods=['GET','POST'])
         self.blueprint.add_url_rule("/role/add", 'add_role', view_func=self.add_role, methods=['GET','POST'])
         self.blueprint.add_url_rule("/role/assign", 'assign_role', view_func=self.assign_role, methods=['GET','POST'])
         self.blueprint.add_url_rule("/admin", 'admin' , view_func=self.admin, methods=['GET'])
+        self.blueprint.add_url_rule("/api/key/get", 'get_api_key', view_func=self.get_api_key, methods=['GET','POST'])
 
     def init_app(self, app):
         app.extensions['IAM'] = self # link for decorator access
@@ -93,10 +96,18 @@ class IAM:
             self.blueprint, url_prefix=self.url_prefix
         )
         # Set menu
-        fef = app.extensions['fefset']
-        fef.settings['side_menu_name_function'] = self.side_menu_name #'Account'
-        fef.add_side_menu_entry('Login', f"{self.url_prefix}/user/login")#url_for('iam_blueprint.login'))        
-        fef.add_side_menu_entry('Register', f"{self.url_prefix}/user/add")#url_for('iam_blueprint.register'))        
+        if 'fefset' in app.extensions:
+            fef = app.extensions['fefset']
+            fef.settings['side_menu_name_function'] = self.side_menu_name #'Account'
+            fef.add_side_menu_entry('Login', f"{self.url_prefix}/user/login")#url_for('iam_blueprint.login'))        
+            fef.add_side_menu_entry('Register', f"{self.url_prefix}/user/add")#url_for('iam_blueprint.register'))
+            self.headless = False
+        else:
+            app.logger.warning(
+                'No frontend available, operating in headless mode.'
+                'If this is unintended, be sure to init "fefset" before "IAM" extension'
+            )
+            self.headless = True
 
     def side_menu_name(self):
         return f"Hi, {current_user}" if current_user.is_authenticated else 'Account'
@@ -105,26 +116,66 @@ class IAM:
     def iam_index(self):
         return render_template('IAM/index.html')
 
-    def add_user(self):
+    def add_user(self, username, email, password):
+        first_user = not bool(self.models.User.query.all())
+        new_user = self.models.User(
+            username=username,
+            email=email,
+            password_hash=generate_password_hash(password),
+            role='admin' if first_user else 'viewer',
+            enabled=first_user #if too many users disable
+        )
+        
+        self.db.session.add(new_user)
+        self.db.session.commit()
+    
+    def add_user_form(self):
         form = self.RegistrationForm()
         if form.validate_on_submit():
-            first_user = not bool(self.models.User.query.all())
-            new_user = self.models.User(
+            self.add_user(
                 username=form.username.data,
                 email=form.email.data,
-                password_hash=generate_password_hash(form.password.data),
-                role='admin' if first_user else 'viewer',
-                enabled=first_user #if too many users disable
+                password=form.password.data,
             )
-
-            self.db.session.add(new_user)
-            self.db.session.commit()
-
             flash("User was created")
 
             return render_template('IAM/registration_success.html') #redirect('/')
         return render_template('uxfab/form.html', form=form, title='Register')
+    
+    def add_user_api(self):
+        """
+        API call route to add users.
+        First user gets admin rights.
 
+        Example:
+          >>> import requests
+          >>> r = requests.post(
+          ...   'http://localhost:5000/auth/api/user/add',
+          ...   json={'username':'admin',
+          ...   'email':'admin@admin.be','password':'admin'}
+          ... )
+        
+        """
+        data = request.get_json()  # Get JSON data from the API call
+        
+        if data:  # Ensure data is provided
+            # Check if the required fields are present in the JSON
+            if 'username' in data and 'email' in data and 'password' in data:
+                self.add_user(
+                    username=data['username'],
+                    email=data['email'],
+                    password=data['password']
+                )
+                
+                # Return a JSON success message
+                return jsonify({"message": "User was created successfully", "status": "success"}), 201
+            else:
+                # Return an error message if fields are missing
+                return jsonify({"message": "Missing required fields", "status": "error"}), 400
+        else:
+            # Return an error message if no JSON data is provided
+            return jsonify({"message": "Invalid request: No JSON data", "status": "error"}), 400
+    
     @login_required
     def add_role(self):
         form = self.RoleForm()
@@ -155,27 +206,114 @@ class IAM:
             return redirect(url_for('iam_blueprint.iam'))
         return render_template('uxfab/form.html', form=form, title='Assign role')
 
-    def login_user(self):
+    def login_user(self, username, password):
+        user = self.models.User.query.filter_by(username=username).first()
+        if user:
+            if check_password_hash(user.password_hash, password):
+                login_user(user)#, remember=form.remember.data)
+                return True
+        abort(404)
+
+    def login_with_key(self, api_key):
+        key = self.models.APIKey.query.filter_by(key=api_key).first()
+        if key:
+            login_user(self.models.User.query.get_or_404(key.user_id))
+            return True
+        abort(404)
+        
+    def login_user_form(self):
         form = self.LoginForm()
         if form.validate_on_submit():
             # Login and validate the user.
             # user should be an instance of your `User` class
-            user = self.models.User.query.filter_by(username=form.username.data).first()
-            if user:
-                if check_password_hash(user.password_hash, form.password.data):
-                    login_user(user)#, remember=form.remember.data)
-                    flash('Logged in successfully.')
-                    next = request.args.get('next')
-                    # is_safe_url should check if the url is safe for redirects.
-                    # See http://flask.pocoo.org/snippets/62/ for an example.
-                    #if not is_safe_url(next):
-                    #    return flask.abort(400)
-                    return redirect(next or '/')
+            user_login_success = self.login_user(
+                username = form.username.data,
+                password = form.password.data
+            )
+            flash('Logged in successfully.')
+            next = request.args.get('next')
+            # is_safe_url should check if the url is safe for redirects.
+            # See http://flask.pocoo.org/snippets/62/ for an example.
+            #if not is_safe_url(next):
+            #    return flask.abort(400)
+            return redirect(next or '/')
         return render_template('IAM/login.html', form=form, title='Login')
 
     def logout_user(self):
         logout_user()
         return redirect('/')
+
+    def login_user_api(self):
+        """
+        Important to work with sessions.
+        Example login with key, but user/password works also.
+
+        Example:
+          >>> import requests
+          >>> session = requests.Session()
+          >>> session.post(
+          ...   'http://localhost:5000/auth/api/user/login',
+          ...   json={'key':key}
+          ...   #or: json={'username':...,'password':...}
+          ... )
+
+        Continue with this session for your `post` or `get` calls.
+        """
+        data = request.get_json()
+        
+        if data:  # Ensure data is provided
+            # Check if the required fields are present in the JSON
+            if 'username' in data and 'password' in data:
+                user_login_success = self.login_user(
+                    username=data['username'],
+                    password=data['password']
+                )
+                
+                # Return a JSON success message
+                return jsonify({"message": "User was logged in successfully", "status": "success"}), 201
+            elif 'key' in data:
+                user_login_sucess = self.login_with_key(data['key'])
+                # Return a JSON success message
+                return jsonify({"message": "User was logged in successfully", "status": "success"}), 201
+            else:
+                # Return an error message if fields are missing
+                return jsonify({"message": "Missing required fields", "status": "error"}), 400
+        else:
+            # Return an error message if no JSON data is provided
+            return jsonify({"message": "Invalid request: No JSON data", "status": "error"}), 400
+        
+    @login_required
+    def get_api_key(self):
+        """
+        Example:
+          >>> r = requests.post(
+          ...   'http://localhost:5000/auth/api/user/add',
+          ...   json={'username':'admin',
+          ...   'email':'admin@admin.be','password':'admin'}
+          ... )                                   
+          >>> s = requests.Session()
+          >>> r = s.post(
+          ...   'http://localhost:5000/auth/api/user/login',
+          ... json={'username':'admin','password':'admin'}
+          ... )
+          >>> r = s.post('http://localhost:5000/auth/api/key/get',json={})
+          >>> print(r.json()) # shows API key
+        """
+        data = request.get_json()
+
+        expiration = None
+        if data:  # Ensure data is provided
+            # Check if the required fields are present in the JSON
+            if 'expiration' in data:
+                expiration = data['expiration']
+        
+        key = self.models.APIKey(
+            user_id = current_user.id,
+            expiration = expiration
+        )
+        self.db.session.add(key)
+        self.db.session.commit()
+        return jsonify({"key": key.key, "status": "success"}), 201
 
     # Profile page
     @login_required
