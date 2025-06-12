@@ -62,9 +62,10 @@ class IAM:
             if not check_password_hash(current_user.password_hash, old_password.data):
                 raise ValidationError('This is not the user you are looking for')
 
-    def __init__(self, db, app=None, url_prefix='/auth'):
+    def __init__(self, db, app=None, url_prefix='/auth', root_role='admin'):
         self.db = db
         self.url_prefix = url_prefix
+        self.root_role = root_role
         self.login_manager = LoginManager()
         self.models = IAModels(db)
 
@@ -99,8 +100,10 @@ class IAM:
         if 'fefset' in app.extensions:
             fef = app.extensions['fefset']
             fef.settings['side_menu_name_function'] = self.side_menu_name #'Account'
-            fef.add_side_menu_entry('Login', f"{self.url_prefix}/user/login")#url_for('iam_blueprint.login'))        
-            fef.add_side_menu_entry('Register', f"{self.url_prefix}/user/add")#url_for('iam_blueprint.register'))
+            fef.add_side_menu_entry('Login', f"{self.url_prefix}/user/login", role=None)#url_for('iam_blueprint.login'))        
+            fef.add_side_menu_entry('Register', f"{self.url_prefix}/user/add", role=None)#url_for('iam_blueprint.register'))
+            fef.add_side_menu_entry('Logout', f"{self.url_prefix}/user/logout", role=True)
+            fef.add_side_menu_entry('Admin', f"{self.url_prefix}/", role=self.root_role)
             self.headless = False
         else:
             app.logger.warning(
@@ -112,7 +115,7 @@ class IAM:
     def side_menu_name(self):
         return f"Hi, {current_user}" if current_user.is_authenticated else 'Account'
 
-    @login_required
+    @root_required
     def iam_index(self):
         return render_template('IAM/index.html')
 
@@ -122,7 +125,7 @@ class IAM:
             username=username,
             email=email,
             password_hash=generate_password_hash(password),
-            role='admin' if first_user else 'viewer',
+            role=self.root_role if first_user else 'viewer',
             enabled=first_user #if too many users disable
         )
         
@@ -176,7 +179,7 @@ class IAM:
             # Return an error message if no JSON data is provided
             return jsonify({"message": "Invalid request: No JSON data", "status": "error"}), 400
     
-    @login_required
+    @root_required
     def add_role(self):
         form = self.RoleForm()
         if form.validate_on_submit():
@@ -190,7 +193,7 @@ class IAM:
             return redirect(url_for('iam_blueprint.iam'))
         return render_template('uxfab/form.html', form=form, title='Add role')
 
-    @login_required
+    @root_required
     def assign_role(self):
         form = self.RoleAssignForm()
         form.role_id.choices = [(r.id, r) for r in self.models.Role.query.all()]
@@ -329,7 +332,7 @@ class IAM:
         return render_template('uxfab/form.html', form=form, title='Profile')    
 
     # Admin page
-    @role_required('admin')
+    @root_required
     def admin(self):
         if current_user.role != 'admin':
             abort(HTTPStatus.UNAUTHORIZED)
@@ -353,34 +356,3 @@ class IAM:
         self.db.session.delete(user)
         self.db.session.commit()
         return redirect('/user/admin')
-
-
-def create_app(run=False):
-    import os
-    from flask import Flask
-    from flask_fefset import FEFset
-    from flask_uxfab import UXFab
-    from flask_sqlalchemy import SQLAlchemy
-    app = Flask(__name__)
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
-    app.config['SECRET_KEY'] = os.urandom(12).hex() # to allow csrf forms
-    db = SQLAlchemy()
-    fef = FEFset(frontend='bootstrap4')
-    fef.init_app(app)
-    db.init_app(app)
-    uxf = UXFab()
-    uxf.init_app(app)
-    iam = IAM(db)
-    iam.init_app(app)
-    with app.app_context():
-        db.create_all()
-    @app.route('/')
-    def index():
-        return redirect('/auth')
-    if run: app.run(host='0.0.0.0')
-    else:
-        return app
-
-if __name__ == '__main__':
-    create_app(run=True)
-

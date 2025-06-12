@@ -12,10 +12,12 @@ WORKDIR /app
 # CSI code
 ENV TZ="Europe/Brussels"
 ENV PATH=/home/app/.local/bin/:$PATH
-ENV FLASK_APP=flask_iam:create_app
+ENV FLASK_APP=tests:create_app
 ENV FLASK_RUN_HOST=0.0.0.0
+ENV FLASK_DEBUG=true
 
 COPY --chown=app:app . .
+RUN git config --global --add safe.directory /app
 RUN pip install .
 
 EXPOSE 5000

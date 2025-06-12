@@ -1,0 +1,2 @@
+recursive-exclude tests *
+recursive-include flask_iam/templates *.html

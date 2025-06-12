@@ -2,9 +2,16 @@
 requires = ["setuptools","setuptools-scm"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools.packages.find]
+include = ["flask_iam*"]
+exclude = ["docs*", "tests*"]
+
+[tool.setuptools]
+include-package-data = true
+
 [project]
 name = "Flask-IAM"
-version = "0.0.4"
+version = "0.0.5"
 readme = "README.md"
 dependencies = [
   'Flask-Login==0.6.3',

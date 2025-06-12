@@ -29,7 +29,7 @@ def root_required(func):
     def decorated_view(*args, **kwargs):
         if request.method in EXEMPT_METHODS or current_app.config.get("LOGIN_DISABLED"):
             pass
-        elif not current_user.id == 0: #.is_authenticated:
+        elif not current_user.id == 1: #.is_authenticated:
             return current_app.login_manager.unauthorized()
         return current_app.ensure_sync(func)(*args, **kwargs)
  
@@ -64,3 +64,32 @@ def role_required(role):
  
         return decorated_view
     return specified_role_required
+
+def check_user_role(role_name):
+    """Checks if the user has a certain role
+
+    Args:
+        role_name: str | bool | None
+            If str, than role name to check. If True, just requires user to be
+            authenticated, if False no role required and if None it should be
+            anonymous user
+
+    TODO use this function from within role_required decorator
+    """
+    if role_name is None:
+        return not current_user.is_authenticated
+    elif role_name is True:
+        return current_user.is_authenticated
+    elif role_name is False:
+        return True
+    elif isinstance(role_name, str):
+        if not current_user.is_authenticated: return False
+        role = current_app.extensions['IAM'].models.Role.query.filter_by(name=role_name).first()
+        if role:
+            assigned_role = current_app.extensions['IAM'].models.RoleRegistration.query.filter_by(
+                user_id=current_user.id
+            ).filter_by(role_id=role.id).first()
+            if assigned_role: return True
+        return current_user.role == role_name
+    else:
+        raise TypeError('role_name should be str, bool or None')

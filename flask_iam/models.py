@@ -21,6 +21,12 @@ class IAModels(object):
             role_interest = db.Column(db.Integer, default=0)
             enabled = db.Column(db.Boolean)
 
+            def __repr__(self):
+                return f"<User: self.username>"
+
+            def __str__(self):
+                return self.username
+            
             @property
             def data_columns(self):
                 return [self.username, self.email, self.role, self.role_interest, self.enabled]
@@ -40,6 +46,12 @@ class IAModels(object):
         class Role(db.Model):
             id = db.Column(db.Integer, primary_key=True)
             name = db.Column(db.String, unique=True, nullable=False)
+
+            def __repr__(self):
+                return f"<Role: {self.name}>"
+
+            def __str__(self):
+                return self.name
         self.Role = Role
 
         class RoleRegistration(db.Model):
