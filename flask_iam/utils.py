@@ -69,8 +69,8 @@ def check_user_role(role_name):
     """Checks if the user has a certain role
 
     Args:
-        role_name: str | bool | None
-            If str, than role name to check. If True, just requires user to be
+        role_name: str | list[str] | bool | None
+            If str, than role name to check, or list of str, set of roles to check. If True, just requires user to be
             authenticated, if False no role required and if None it should be
             anonymous user
 
@@ -82,14 +82,17 @@ def check_user_role(role_name):
         return current_user.is_authenticated
     elif role_name is False:
         return True
-    elif isinstance(role_name, str):
+    elif isinstance(role_name, str) or isinstance(role_name, list):
         if not current_user.is_authenticated: return False
-        role = current_app.extensions['IAM'].models.Role.query.filter_by(name=role_name).first()
-        if role:
-            assigned_role = current_app.extensions['IAM'].models.RoleRegistration.query.filter_by(
-                user_id=current_user.id
-            ).filter_by(role_id=role.id).first()
-            if assigned_role: return True
-        return current_user.role == role_name
+        roles = [role_name] if isinstance(role_name, str) else role_name
+        
+        for role_name in roles:
+            role = current_app.extensions['IAM'].models.Role.query.filter_by(name=role_name).first()
+            if role:
+                assigned_role = current_app.extensions['IAM'].models.RoleRegistration.query.filter_by(
+                    user_id=current_user.id
+                ).filter_by(role_id=role.id).first()
+                if assigned_role: return True
+        return current_user.role in roles
     else:
         raise TypeError('role_name should be str, bool or None')
