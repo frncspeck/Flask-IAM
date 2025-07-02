@@ -29,7 +29,7 @@ def root_required(func):
     def decorated_view(*args, **kwargs):
         if request.method in EXEMPT_METHODS or current_app.config.get("LOGIN_DISABLED"):
             pass
-        elif not current_user.id == 1: #.is_authenticated:
+        elif not current_user.id == 1:
             return current_app.login_manager.unauthorized()
         return current_app.ensure_sync(func)(*args, **kwargs)
  
@@ -54,37 +54,32 @@ def role_required(role):
             if request.method in EXEMPT_METHODS or current_app.config.get("LOGIN_DISABLED"):
                 pass
             else:
-                print('Testing if role assigned')
-                role_id = current_app.extensions['IAM'].models.Role.query.filter_by(name=role).first().id
-                print(role_id)
-                assigned_role = current_app.extensions['IAM'].models.RoleRegistration.query.filter_by(user_id=current_user.id).filter_by(role_id=role_id).first()
-                print('Assigned role', assigned_role)
-                if not assigned_role: return current_app.login_manager.unauthorized()
+                if not check_user_role(role): return current_app.login_manager.unauthorized()
             return current_app.ensure_sync(func)(*args, **kwargs)
  
         return decorated_view
     return specified_role_required
 
-def check_user_role(role_name):
+def check_user_role(role):
     """Checks if the user has a certain role
 
     Args:
-        role_name: str | list[str] | bool | None
+        role: str | list[str] | bool | None
             If str, than role name to check, or list of str, set of roles to check. If True, just requires user to be
             authenticated, if False no role required and if None it should be
             anonymous user
 
     TODO use this function from within role_required decorator
     """
-    if role_name is None:
+    if role is None:
         return not current_user.is_authenticated
-    elif role_name is True:
+    elif role is True:
         return current_user.is_authenticated
-    elif role_name is False:
+    elif role is False:
         return True
-    elif isinstance(role_name, str) or isinstance(role_name, list):
+    elif isinstance(role, str) or isinstance(role, list):
         if not current_user.is_authenticated: return False
-        roles = [role_name] if isinstance(role_name, str) else role_name
+        roles = [role] if isinstance(role, str) else role
         
         for role_name in roles:
             role = current_app.extensions['IAM'].models.Role.query.filter_by(name=role_name).first()
