@@ -80,7 +80,9 @@ def check_user_role(role):
     elif isinstance(role, str) or isinstance(role, list):
         if not current_user.is_authenticated: return False
         roles = [role] if isinstance(role, str) else role
-        
+        if current_app.config.get('IAM_ADMIN_FULL_ACCESS'):
+            roles.append('admin')
+            
         for role_name in roles:
             role = current_app.extensions['IAM'].models.Role.query.filter_by(name=role_name).first()
             if role:

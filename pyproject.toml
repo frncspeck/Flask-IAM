@@ -11,7 +11,7 @@ include-package-data = true
 
 [project]
 name = "Flask-IAM"
-version = "0.0.8"
+version = "0.0.9"
 readme = "README.md"
 dependencies = [
   'Flask-Login==0.6.3',
